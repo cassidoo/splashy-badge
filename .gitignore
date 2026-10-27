@@ -1,0 +1,7 @@
+backups/
+backup-*/
+preview*.png
+__pycache__/
+*.pyc
+.DS_Store
+._*
