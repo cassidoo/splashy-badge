@@ -22,7 +22,12 @@ Follow these steps when a user asks you to install or deploy Splashy Badge.
    - Close other programs that hold the port (Thonny, `screen`, Web Serial
      tabs). **Never run serial commands in parallel:** only one process can own
      the port.
-4. **Install.** From the repository root, run `python3 install.py`. Allow
+4. **Ask about the menu icon.** The home menu only draws its own built-in
+   icons, so Splashy Badge gets the default dot-grid tile unless the menu is
+   patched. Ask the user whether they want the white water-droplet icon. If
+   they do, add `--menu-icon` in the next step. It backs up and patches
+   `apps/menu/app.py`, and a firmware update undoes it.
+5. **Install.** From the repository root, run `python3 install.py`. Allow
    about two minutes. The script:
    - calls `powman.reset_into_msc()` over serial to enter USB mass-storage mode;
    - waits for the `BADGER` volume, backs up any existing copy into `backups/`,
@@ -32,7 +37,7 @@ Follow these steps when a user asks you to install or deploy Splashy Badge.
    - resets the badge.
 
    Pass `--port <port>` if more than one badge is connected.
-5. **Report the result.** On success the script ends with
+6. **Report the result.** On success the script ends with
    `Verified N files in /system/apps/splashy_badge.` Tell the user that Splashy
    Badge is now in the badge menu, that setup opens the first time so they can
    pick their handle, title, and pronouns, and summarise the controls:
@@ -70,8 +75,8 @@ find "<BADGER>/apps" -name '._*' -delete   # macOS only
 
 - Only write to `apps/splashy_badge/` on the badge. Don't modify `main.py`,
   `secrets.py`, other apps, or anything under `/state`. The one exception is
-  `install.py --menu-icon`: run it only if the user asks for the droplet menu
-  icon. It backs up and patches `apps/menu/app.py` so the menu loads
+  `install.py --menu-icon`: use it only if the user says yes to the droplet
+  menu icon. It backs up and patches `apps/menu/app.py` so the menu loads
   `menu_icon.json`. At runtime the app
   itself saves its labels with `badgeware.State` (`/state/splashy_badge.json`).
 - Normal REPL mode mounts `/system` read-only. `mpremote fs cp` to
