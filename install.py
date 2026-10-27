@@ -12,6 +12,18 @@ APP = "splashy_badge"
 SOURCE = ROOT / APP
 MPREMOTE = [sys.executable, "-m", "mpremote"]
 
+MENU_MARKER = "# menu_icon.json hook (added by splashy-badge install.py --menu-icon)"
+MENU_ANCHOR = '            icon_key = slug if slug in ICONS else "default"\n'
+MENU_HOOK = (
+    "            " + MENU_MARKER + "\n"
+    "            if slug not in ICONS and file_exists(f\"{path}/menu_icon.json\"):\n"
+    "                try:\n"
+    "                    with open(f\"{path}/menu_icon.json\") as icon_file:\n"
+    "                        ICONS[slug] = tuple(tuple(c) for c in json.load(icon_file))\n"
+    "                except (OSError, ValueError):\n"
+    "                    pass\n"
+)
+
 
 def remote(*args, timeout=30, check=True):
     return subprocess.run(MPREMOTE + list(args), text=True, capture_output=True,
@@ -87,7 +99,44 @@ def eject(volume):
         return False
 
 
-def deploy(port=None, volume=None):
+def patch_menu_source(source):
+    """Let the menu draw an app's own white menu_icon.json glyph. Returns None if unsupported."""
+    if MENU_MARKER in source:
+        return source
+    if source.count(MENU_ANCHOR) != 1 or "\nimport os\n" not in source:
+        return None
+    if "\nimport json\n" not in source:
+        source = source.replace("\nimport os\n", "\nimport json\nimport os\n", 1)
+    return source.replace(MENU_ANCHOR, MENU_HOOK + MENU_ANCHOR, 1)
+
+
+def patch_menu(volume):
+    menu = volume / "apps" / "menu" / "app.py"
+    if not menu.is_file():
+        print("No menu/app.py on this badge; skipping the menu icon.", flush=True)
+        return
+    original = menu.read_text()
+    patched = patch_menu_source(original)
+    if patched is None:
+        print("This menu version isn't recognised; skipping the menu icon.", flush=True)
+    elif patched == original:
+        print("Menu already shows app icons.", flush=True)
+    else:
+        backup = ROOT / "backups" / ("menu-app-" + time.strftime("%Y%m%d-%H%M%S") + ".py")
+        backup.parent.mkdir(exist_ok=True)
+        backup.write_text(original)
+        menu.write_text(patched)
+        if menu.read_text() != patched:
+            raise RuntimeError("USB copy of menu/app.py did not match")
+        print("Menu patched to show the droplet; original saved to %s" % backup, flush=True)
+    for metadata in (menu.parent / "._app.py",):
+        try:
+            metadata.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def deploy(port=None, volume=None, menu_icon=False):
     if volume is None:
         detected = ports()
         if port is None and len(detected) != 1:
@@ -133,6 +182,8 @@ def deploy(port=None, volume=None):
             metadata.unlink()
         except FileNotFoundError:
             pass
+    if menu_icon:
+        patch_menu(volume)
     if hasattr(os, "sync"):
         os.sync()
     print("Copied %d files; ejecting badge." % len(expected), flush=True)
@@ -169,9 +220,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Install Splashy Badge without changing other apps.")
     parser.add_argument("--port")
     parser.add_argument("--volume", type=Path)
+    parser.add_argument("--menu-icon", action="store_true",
+                        help="also patch the home menu so it draws the droplet icon "
+                             "(backs up menu/app.py; a firmware update undoes it)")
     args = parser.parse_args()
     try:
-        deploy(args.port, args.volume)
+        deploy(args.port, args.volume, args.menu_icon)
     except (RuntimeError, OSError, subprocess.SubprocessError) as error:
         print("Installation failed: %s" % error, file=sys.stderr)
         if isinstance(error, subprocess.CalledProcessError):

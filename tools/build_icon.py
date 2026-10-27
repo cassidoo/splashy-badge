@@ -1,99 +1,102 @@
-"""Generate splashy_badge/icon.png: a 24x24 RGBA water droplet."""
+"""Generate Splashy Badge's icons from one vector water droplet.
+
+splashy_badge/menu_icon.json  white menu glyph: contours in the menu's
+                              -0.5..0.5 space, filled even-odd.
+splashy_badge/icon.png        the same glyph as a 24x24 white-on-transparent PNG.
+"""
+
+import json
 import math
+import os
 import struct
 import zlib
-from pathlib import Path
 
-SIZE = 24
-SAMPLES = 6
-TIP = (12.0, 1.2)
-CENTRE = (12.0, 15.0)
-RADIUS = 7.6
-OUTLINE = 1.15
-LIGHT = (150, 226, 255)
-DEEP = (18, 92, 196)
-WAVE_LIGHT = (92, 196, 250)
-WAVE_DEEP = (10, 58, 150)
-RIM = (6, 30, 78)
-SHINE = (255, 255, 255)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+APP = os.path.join(ROOT, "splashy_badge")
+
+TIP = (0.0, -0.44)
+CENTRE = (0.0, 0.12)
+RADIUS = 0.31
 
 
-def edge_distance(x, y):
-    """Signed distance (approximate) inside the teardrop; positive is inside."""
-    cx, cy = CENTRE
-    tx, ty = TIP
-    inside = RADIUS - math.hypot(x - cx, y - cy)
-    dx, dy = cx - tx, cy - ty
-    d = math.hypot(dx, dy)
-    half = math.asin(RADIUS / d)
-    px, py = x - tx, y - ty
-    along = (px * dx + py * dy) / d
-    if 0 < along < d * math.cos(half) ** 2:
-        across = abs(px * dy - py * dx) / d
-        inside = max(inside, along * math.sin(half) - across * math.cos(half))
-    return inside
+def droplet():
+    distance = CENTRE[1] - TIP[1]
+    spread = math.acos(RADIUS / distance)
+    start = -math.pi / 2 + spread
+    end = 3 * math.pi / 2 - spread
+    points = [TIP]
+    steps = 28
+    for i in range(steps + 1):
+        a = start + (end - start) * i / steps
+        points.append((CENTRE[0] + RADIUS * math.cos(a), CENTRE[1] + RADIUS * math.sin(a)))
+    return points
 
 
-def wave_y(x):
-    return 15.6 + 1.1 * math.sin((x - 4.0) * 0.75)
+def wave(y=0.15, amplitude=0.035, thickness=0.06, half_width=0.2, steps=14):
+    def curve(x):
+        return y + amplitude * math.sin(x / half_width * math.pi * 1.25)
+
+    top = [(-half_width + 2 * half_width * i / steps, 0.0) for i in range(steps + 1)]
+    top = [(x, curve(x) - thickness / 2) for x, _ in top]
+    bottom = [(x, curve(x) + thickness) for x, _ in reversed(top)]
+    return top + bottom
 
 
-def mix(a, b, t):
-    t = min(1.0, max(0.0, t))
-    return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
+def shine(inner=0.17, outer=0.225, start=200, end=250, steps=6):
+    angles = [math.radians(start + (end - start) * i / steps) for i in range(steps + 1)]
+    arc = lambda r, seq: [(CENTRE[0] + r * math.cos(a), CENTRE[1] + r * math.sin(a)) for a in seq]
+    return arc(outer, angles) + arc(inner, reversed(angles))
 
 
-def shade(x, y):
-    inside = edge_distance(x, y)
-    if inside < 0:
-        return None
-    if inside < OUTLINE:
-        return RIM
-    body = mix(LIGHT, DEEP, (y - 2) / 20 + (x - 6) / 40)
-    if y > wave_y(x):
-        body = mix(WAVE_LIGHT, WAVE_DEEP, (y - wave_y(x)) / 6.5)
-        if y - wave_y(x) < 0.9:
-            body = mix(body, SHINE, 0.75)
-    # curved highlight on the upper left of the bulb
-    hx, hy = x - 9.3, y - 12.2
-    arc = math.hypot(hx, hy)
-    if 2.1 < arc < 3.5 and hx < 0.6 and hy < 1.2:
-        body = mix(body, SHINE, 0.95)
-    if math.hypot(x - 10.4, y - 6.6) < 0.95:
-        body = mix(body, SHINE, 0.9)
-    return body
+def contours():
+    return [droplet(), wave(), shine()]
+
+
+def flat(contour):
+    return [round(v, 4) for point in contour for v in point]
+
+
+def inside(x, y, shapes):
+    hit = False
+    for contour in shapes:
+        j = len(contour) - 1
+        for i, (xi, yi) in enumerate(contour):
+            xj, yj = contour[j]
+            if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+                hit = not hit
+            j = i
+    return hit
+
+
+def png(size=24, samples=6, margin=0.04):
+    shapes = contours()
+    span = 1.0 - 2 * margin
+    raw = b""
+    for py in range(size):
+        row = b"\x00"
+        for px in range(size):
+            hits = 0
+            for sy in range(samples):
+                for sx in range(samples):
+                    x = ((px + (sx + 0.5) / samples) / size - 0.5) / span
+                    y = ((py + (sy + 0.5) / samples) / size - 0.5) / span
+                    hits += inside(x, y, shapes)
+            row += bytes((255, 255, 255, round(255 * hits / samples**2)))
+        raw += row
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    header = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
 
 
 def build():
-    rows = []
-    for py in range(SIZE):
-        row = bytearray()
-        for px in range(SIZE):
-            total = [0.0, 0.0, 0.0]
-            hits = 0
-            for sy in range(SAMPLES):
-                for sx in range(SAMPLES):
-                    c = shade(px + (sx + 0.5) / SAMPLES, py + (sy + 0.5) / SAMPLES)
-                    if c is not None:
-                        hits += 1
-                        for i in range(3):
-                            total[i] += c[i]
-            if hits:
-                row += bytes(round(total[i] / hits) for i in range(3))
-                row.append(round(255 * hits / SAMPLES ** 2))
-            else:
-                row += b"\0\0\0\0"
-        rows.append(b"\0" + bytes(row))
-
-    def chunk(kind, data):
-        return (struct.pack(">I", len(data)) + kind + data
-                + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff))
-
-    png = b"\x89PNG\r\n\x1a\n"
-    png += chunk(b"IHDR", struct.pack(">IIBBBBB", SIZE, SIZE, 8, 6, 0, 0, 0))
-    png += chunk(b"IDAT", zlib.compress(b"".join(rows), 9))
-    png += chunk(b"IEND", b"")
-    (Path(__file__).resolve().parents[1] / "splashy_badge" / "icon.png").write_bytes(png)
+    with open(os.path.join(APP, "menu_icon.json"), "w") as f:
+        json.dump([flat(c) for c in contours()], f, separators=(",", ":"))
+        f.write("\n")
+    with open(os.path.join(APP, "icon.png"), "wb") as f:
+        f.write(png())
 
 
 if __name__ == "__main__":

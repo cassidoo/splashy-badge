@@ -28,6 +28,11 @@ over serial, and resets the badge. Allow about two minutes. It never changes
 other apps, `secrets.py`, or saved state. If Splashy Badge is already
 installed, the old copy is backed up into `backups/` first.
 
+- Want the white droplet on Splashy Badge's menu tile? Add `--menu-icon`. The
+  menu only draws its own built-in icons, so this adds a small hook to
+  `apps/menu/app.py` that loads an app's `menu_icon.json`. The original file is
+  backed up into `backups/`. A firmware update undoes the hook; just run the
+  installer again. Without it, Splashy Badge shows the default dot-grid tile.
 - More than one badge connected? Add `--port <port>` (see `mpremote devs`).
 - If the drive doesn't appear by itself, open the badge's **Mass Storage** app
   and run `python3 install.py --volume <path to BADGER>`.
@@ -66,12 +71,14 @@ behaves.
 
 ```sh
 python3 -m unittest discover -s tests
-python3 tools/build_icon.py          # regenerate splashy_badge/icon.png
+python3 tools/build_icon.py          # regenerate menu_icon.json and icon.png
 python3 tools/capture_smoke.py PORT  # run on a badge from this checkout; writes preview.png
 ```
 
-`splashy_badge/icon.png` is a 24x24 water droplet. The October 2026 menu only
-draws its own built-in icons, so for now Splashy Badge shows the default tile.
+The droplet is drawn once as vector contours. `splashy_badge/menu_icon.json` is
+the white menu glyph, in the same format as the menu's built-in icons
+(even-odd contours in -0.5..0.5). `splashy_badge/icon.png` is the same glyph at
+24x24, white on transparent.
 
 `physics.py` contains the spring-coupled wave grid and buoyancy. Waves take at
 most two stable 0.05 s sub-steps per frame and objects step once, so slow

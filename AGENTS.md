@@ -69,7 +69,10 @@ find "<BADGER>/apps" -name '._*' -delete   # macOS only
 ### Rules
 
 - Only write to `apps/splashy_badge/` on the badge. Don't modify `main.py`,
-  `secrets.py`, other apps, or anything under `/state`. At runtime the app
+  `secrets.py`, other apps, or anything under `/state`. The one exception is
+  `install.py --menu-icon`: run it only if the user asks for the droplet menu
+  icon. It backs up and patches `apps/menu/app.py` so the menu loads
+  `menu_icon.json`. At runtime the app
   itself saves its labels with `badgeware.State` (`/state/splashy_badge.json`).
 - Normal REPL mode mounts `/system` read-only. `mpremote fs cp` to
   `:/system/...` fails with `EROFS`, so use mass-storage mode, as `install.py`
@@ -85,7 +88,8 @@ find "<BADGER>/apps" -name '._*' -delete   # macOS only
   last frame to `preview.png`. Add `--installed` to test the installed copy.
   Settled frames with nine objects take about 72 ms; keep them under 80 ms.
 - The art is generated: edit `tools/build_icon.py` rather than hand-editing
-  `splashy_badge/icon.png`, which must stay 24x24 RGBA.
+  `splashy_badge/menu_icon.json` or `splashy_badge/icon.png`. The PNG must stay
+  24x24 RGBA, and menu icons are white glyphs on the menu's colored tiles.
 - `splashy_badge/README.md` must start with a one-sentence description, because
   the badge menu uses it.
 - MicroPython notes: viper can't shift a constant into the sign bit (`255 << 24`),
