@@ -4,7 +4,7 @@ A motion-reactive 3D water tank for the **GitHub Universe 2026 badge**. Tilt the
 badge to slosh the water, then drop your handle, title, and pronouns in as
 floating 3D letters (and lots of little Monas).
 
-![Splashy Badge running on the badge](docs/pool.png)
+![A Mona splashing into the pool on a badge](docs/splash.gif)
 
 | First launch | On-badge keyboard | Icon |
 | --- | --- | --- |
@@ -73,6 +73,7 @@ behaves.
 python3 -m unittest discover -s tests
 python3 tools/build_icon.py          # regenerate menu_icon.json and icon.png
 python3 tools/capture_smoke.py PORT  # run on a badge from this checkout; writes preview.png
+python3 tools/capture_gif.py PORT    # record docs/splash.gif from the installed app (needs Pillow)
 ```
 
 The droplet is drawn once as vector contours. `splashy_badge/menu_icon.json` is
